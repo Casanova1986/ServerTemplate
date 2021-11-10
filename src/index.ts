@@ -1,115 +1,45 @@
-// optional chaining
-// implement interface
-import { send } from './mailer';
+// const
+//     {Server} = require("socket.io"),
+//     server = new Server(5000);
+import { testSocket} from './mongoConnect';
+import {clientRedis} from './redisConnect';
+const redisAdapter = require("socket.io-redis");
+//const net = require('net') ;
+//const sio = require('socket.io');
+//const farmhash = require('farmhash');
+const cluster = require('cluster');
+const numCPUs = require("os").cpus().length;
+if (cluster.isMaster) {
+  spawnChildServer();
+   console.log("----------" + cluster.isMaster)
 
-interface Pet {
-  name: string;
+} else {
+  require('./appChild');
 }
 
-interface Address {
-  city: string;
-}
-interface Contact {
-  name: string;
-  phone: string;
-  email?: string;
-  pet?: Pet;
-  addresses?: Address[];
-}
+function spawnChildServer() {
+  var workers = new Array();
+  console.log("SpawnChildServer");
+  var spawn = function(i) {
+    
+		workers[i] = cluster.fork();
 
-const contacts: Contact[] = [];
-
-// object literal
-const newContact: Contact = {
-  name: 'Nguyen Van A',
-  phone: '0123123',
-  email: 'abc@gmail.com',
-  pet: {
-    name: 'A',
-  },
-};
-
-const otherContact: Contact = {
-  name: 'Nguyen Van B',
-  phone: '0123124',
-};
-
-contacts.push(newContact);
-
-function getPetName(contact: Contact): string {
-  return contact.pet?.name || '';
-}
-
-function getFirstAddress(contact: Contact) {
-  return contact.addresses?.[0];
-}
-
-// extend interface
-interface Button {
-  label: string;
-  onClick: () => void;
-}
-
-const button: Button = {
-  label: 'Submit',
-  onClick: () => {
-    console.log('click');
-  },
-};
-
-interface IconButton extends Button {
-  icon: string;
-}
-
-const addToCartBtn: IconButton = {
-  label: 'Add to cart',
-  onClick: () => {
-    console.log('click');
-  },
-  icon: 'cart-icon',
-};
-
-class MyContact implements Contact {
-  name: string;
-  phone: string;
-
-  constructor(name: string, phone: string) {
-    this.name = name;
-    this.phone = phone;
+		// Optional: Restart worker on exit
+		workers[i].on('exit', function(code, signal) {
+			console.log('respawning worker', i);
+			spawn(i);
+		});
   }
-}
-
-const a = new MyContact('A', '123');
-console.log(a.name);
-
-interface ContactAdapter {
-  getData: () => Promise<Contact[]>;
-}
-
-class ContactApp {
-  adapter: ContactAdapter;
-  constructor(adapter: ContactAdapter) {
-    this.adapter = adapter;
+  for (let i = 0; i < numCPUs; i++) {
+      console.log("SpawnChild " + i);
+      spawn(i);
   }
-
-  async render() {
-    const contacts: Contact[] =
-      await this.adapter.getData();
-    console.table(contacts);
-  }
+  cluster.on('exit', (deadWorker, code, signal) => {
+      var worker = cluster.fork();
+      var newPID = worker.process.pid;
+      var oldPID = deadWorker.process.pid;
+      console.log('worker ' + oldPID + ' died.' + "code" + code + "signal" + signal);
+      console.log('worker ' + newPID + ' born.');
+  });
 }
 
-class MyContactAdapter implements ContactAdapter {
-  async getData() {
-    // TODO: get data from API
-    const contacts: Contact[] = [
-      { name: 'A', phone: '123' },
-      { name: 'B', phone: '456' },
-    ];
-    return contacts;
-  }
-}
-
-const adapter = new MyContactAdapter();
-const app = new ContactApp(adapter);
-app.render();
