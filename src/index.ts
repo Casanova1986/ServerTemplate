@@ -1,11 +1,11 @@
 const cluster = require('cluster');
 const numCPUs = require('os').cpus().length;
-
+import AppChild from './appChild';
 if (cluster.isMaster) {
   spawnChildServer();
   console.log('----------' + cluster.isMaster);
 } else {
-  require('./appChild');
+  AppChild();
 }
 
 function spawnChildServer() {
