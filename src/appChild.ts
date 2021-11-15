@@ -1,11 +1,26 @@
-import { clientMongo } from './mongoConnect';
-import { clientRedis } from './redisConnect';
-
 const express = require('express');
+const bodyParser = require('body-parser');
 const http = require('http');
 const cors = require('cors');
 const app = express();
+const mongoConfig = require('./mongoConnect');
+
+import { UserController } from './Users/UserController';
+import UserRouter from './Users/UserRouter';
+
 app.use(cors());
+app.use(express.json());
+app.use(
+  bodyParser.urlencoded({
+    extended: true,
+    limit: '5mb',
+  })
+);
+mongoConfig.connect(() => {
+  console.log('Mongo Connected!');
+});
+app.use('/api/user', UserRouter);
+
 const server = http.createServer(app);
 let sequenceNumberByClient = new Map();
 
@@ -22,30 +37,16 @@ export default function AppChild() {
   });
 
   server.listen(3000, () => {
-    console.log('listening on port: 3000');
+    console.log(`Worker ${process.pid} listening on port: 3000`);
   });
-
   io.sockets.on('connection', (socket) => {
     console.log(`Worker ${process.pid} started for ${socket.id}`);
     console.info(`Client connected id = ${socket.id}`);
     // initialize this client's sequence number
     sequenceNumberByClient.set(socket, 1);
-    socket.on('chat message', (msg) => {
-      console.log('Add Message Success from Id:', socket.id + '  ' + msg);
-      clientRedis.HMSET('TestSocketServer', socket.id, JSON.stringify(msg), (err, res) => {
-        if (err) console.log(err);
-        else console.log('Add Message Success from Id:', socket.id + '  ' + msg);
-      });
-      clientMongo.create(
-        {
-          userId: socket.id,
-          message: JSON.stringify(msg),
-        },
-        (err: any, res: any) => {
-          if (err) console.log(err);
-          else console.log('Data is saved!');
-        }
-      );
+    socket.on('user', (msg: any) => {
+      let userMessage = new UserController();
+      userMessage.processMessage(socket.id, msg);
     });
     // setInterval(() => {
     //   for (const [client, sequenceNumber] of sequenceNumberByClient.entries()) {
