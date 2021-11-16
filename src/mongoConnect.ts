@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 let mongodb;
-let mongoDbUrl = 'mongodb://192.168.1.187:27017/feeds';
+let mongoDbUrl = 'mongodb://192.168.1.187:27017/Jack_Test';
 
 function connect(callback) {
   mongoose.connect(mongoDbUrl, (err, db) => {

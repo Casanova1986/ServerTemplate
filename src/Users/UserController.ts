@@ -1,6 +1,5 @@
 import { clientRedis } from '../redisConnect';
 import { userInfo } from './UserModel';
-import bcrypt from 'bcrypt';
 
 export class UserController {
   registerUser(userName: string, passWord: string) {

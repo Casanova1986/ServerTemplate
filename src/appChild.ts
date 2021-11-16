@@ -6,7 +6,11 @@ const app = express();
 const mongoConfig = require('./mongoConnect');
 
 import { UserController } from './Users/UserController';
+import { GuildController } from './Guild/GuildController';
+
 import UserRouter from './Users/UserRouter';
+import GuildRouter from './Guild/GuildRouter';
+import { GuildModel } from './Guild/GuildModel';
 
 app.use(cors());
 app.use(express.json());
@@ -30,7 +34,7 @@ export default function AppChild() {
     allowEIO3: true,
     cors: {
       // List IP client connect to server
-      origin: 'http://192.168.1.91:8080',
+      origin: 'http://192.168.1.152:8080',
       methods: ['GET', 'POST'],
       credentials: true,
     },
@@ -45,20 +49,32 @@ export default function AppChild() {
     // initialize this client's sequence number
     sequenceNumberByClient.set(socket, 1);
     socket.on('user', (msg: any) => {
-      let userMessage = new UserController();
-      userMessage.processMessage(socket.id, msg);
+      //  console.log(msg);
+      //let userMessage = new UserController();
+      //userMessage.processMessage(socket.id, msg);
     });
-    // setInterval(() => {
-    //   for (const [client, sequenceNumber] of sequenceNumberByClient.entries()) {
-    //     client.emit('seq-num', sequenceNumber);
-    //     sequenceNumberByClient.set(client, sequenceNumber + 1);
-    //   }
-    // }, 1000);
-    // when socket disconnects, remove it from the list:
+    socket.on('guild', (msg: any, callback) => {
+      //  console.log(msg);
+      let guild = new GuildController();
+      guild.createGuild(msg, (err, results) => {
+        if (err) {
+          console.log(err);
+          return callback({
+            Status: 1,
+            data: 'Create guild failed',
+          });
+        }
+        console.log(results);
+        callback({
+          Status: 1,
+          data: results,
+        });
+      });
+    });
     socket.on('disconnected', () => {
       socket.disconnect();
       sequenceNumberByClient.delete(socket);
-      console.info(`Client gone [id=${socket.id}]`);
+      console.log(`Client gone [id=${socket.id}]`);
     });
   });
 }
