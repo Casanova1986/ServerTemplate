@@ -54,7 +54,6 @@ UserRouter.post('/login', async (req, res) => {
         });
       } else {
         let password = userData.passWord;
-        console.log(password);
         validatePassWord = bcrypt.compareSync(req.body.passWord, password);
         if (!validatePassWord) {
           res.send({
@@ -67,7 +66,14 @@ UserRouter.post('/login', async (req, res) => {
           res.send({
             Status: 1,
             Body: {
-              data: 'login success',
+              data: {
+                id: userData._id,
+                name: userData.userName,
+                coin: userData.coin,
+                gem: userData.gem,
+                guildID: userData.guildID,
+                isJoin: userData.isJoin,
+              },
             },
           });
         }

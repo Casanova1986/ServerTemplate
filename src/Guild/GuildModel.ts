@@ -1,4 +1,5 @@
 import mongoose = require('mongoose');
+import internal = require('stream');
 
 export enum BegState {
   SENT = 0,
@@ -23,6 +24,14 @@ export interface IGuildMemberInfo {
   fundDonate?: number;
   timeJoin: Date;
   musterHistory?: IMusterInfo[];
+}
+
+export interface ListMemberRequest {
+  playerId: string;
+  name: string;
+  // coin: number;
+  // gem: number;
+  // inventory: Array<Object>;
 }
 
 export interface IGuildBeg {
@@ -54,7 +63,8 @@ export interface IGuild {
   member: number;
   region?: string;
   leaderId: string;
-  memberList: Map<string, IGuildMemberInfo>;
+  memberList: Array<IGuildMemberInfo>;
+  memberRequest: Array<ListMemberRequest>;
   season?: number;
   point: number;
   fund: number;
@@ -62,7 +72,7 @@ export interface IGuild {
   slogan: string;
   announce: string;
   autoAcceptMember: boolean;
-  blockList: Map<string, number>;
+  blockList: Map<string, string>;
   items: Map<string, IItemInfo>;
   begList: Map<string, IGuildBeg>;
   timeCreated: Date;
@@ -85,16 +95,12 @@ const GuildSchema = new mongoose.Schema({
   region: String,
   leaderId: String,
   memberList: {
-    type: Map,
-    of: new mongoose.Schema({
-      role: Number,
-      memberID: String,
-      pointDonate: Number,
-      fundDonate: Number,
-      timeJoin: {
-        type: Date,
-      },
-    }),
+    type: Array,
+    of: Object,
+  },
+  memberRequest: {
+    type: Array,
+    of: Object,
   },
   point: Number,
   fund: Number,
@@ -103,7 +109,7 @@ const GuildSchema = new mongoose.Schema({
   announce: String,
   autoAcceptMember: Boolean,
   blockList: {
-    type: Map,
+    type: Array,
     of: String,
   },
   timeCreated: {

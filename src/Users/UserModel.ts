@@ -1,18 +1,26 @@
-//import mongoose from '../mongoConnect';
+import * as UserConfig from './UserConfig';
 import { Schema, model } from 'mongoose';
-interface UserInfo {
+
+export interface IGuild {
+  guildID: string;
+  isJoin: UserConfig.GuildState;
+}
+interface UserInfo extends IGuild {
   userName: string;
   passWord: string;
   avatar?: string;
-  coint: number;
+  coin: number;
+  inventory: any;
   gem: number;
 }
-
 const schema = new Schema<UserInfo>({
   userName: { type: String, required: true },
   passWord: { type: String, required: true },
   avatar: { type: String, required: false },
-  coint: { type: Number, require: true, default: 2000 },
-  gem: { type: Number, require: true, default: 10 },
+  inventory: { type: Array, required: false, default: null },
+  coin: { type: Number, require: true, default: UserConfig.InitDataUser.COIN },
+  gem: { type: Number, require: true, default: UserConfig.InitDataUser.GEM },
+  guildID: { type: String, require: true, default: '' },
+  isJoin: { type: Number, require: true, default: UserConfig.GuildState.NORMAL },
 });
 export const userInfo = model<UserInfo>('User', schema);

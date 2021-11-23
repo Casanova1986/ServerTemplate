@@ -6,11 +6,12 @@ const app = express();
 const mongoConfig = require('./mongoConnect');
 
 import { UserController } from './Users/UserController';
-import { GuildController } from './Guild/GuildController';
+import { ProcessGuild, GuildController } from './Guild/GuildController';
 
 import UserRouter from './Users/UserRouter';
 import GuildRouter from './Guild/GuildRouter';
 import { GuildModel } from './Guild/GuildModel';
+import { AnyRecord } from 'dns';
 
 app.use(cors());
 app.use(express.json());
@@ -53,23 +54,44 @@ export default function AppChild() {
       //let userMessage = new UserController();
       //userMessage.processMessage(socket.id, msg);
     });
-    socket.on('guild', (msg: any, callback) => {
-      //  console.log(msg);
-      let guild = new GuildController();
-      guild.createGuild(msg, (err, results) => {
+    socket.on('guild', (msg: any, callback: any) => {
+      new ProcessGuild().processGuildMessage(msg, (err: any, results: any) => {
         if (err) {
           console.log(err);
           return callback({
             Status: 1,
-            data: 'Create guild failed',
+            data: 'Server error!',
+          });
+        } else {
+          console.log(results);
+          callback({
+            Status: 1,
+            data: results,
           });
         }
-        console.log(results);
-        callback({
-          Status: 1,
-          data: results,
-        });
       });
+      // let guild = new GuildController();
+      // guild.createGuild(msg, (err, results) => {
+      //   if (err) {
+      //     console.log(err);
+      //     return callback({
+      //       Status: 1,
+      //       data: 'Create guild failed',
+      //     });
+      //   }
+      //   if (results == 'Coin is not enough') {
+      //     callback({
+      //       Status: 1,
+      //       data: results,
+      //     });
+      //   } else {
+      //     console.log(results);
+      //     callback({
+      //       Status: 1,
+      //       data: results._id,
+      //     });
+      //   }
+      // });
     });
     socket.on('disconnected', () => {
       socket.disconnect();

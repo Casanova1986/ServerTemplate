@@ -14,6 +14,7 @@ export class UserController {
       }
     );
   }
+
   processMessage(socketId: string, msg: any) {
     clientRedis.HMSET('TestSocketServer', socketId, JSON.stringify(msg), (err, res) => {
       if (err) console.log(err);
