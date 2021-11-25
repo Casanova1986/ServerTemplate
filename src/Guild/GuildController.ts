@@ -3,6 +3,7 @@ import * as Guild from './GuildModel';
 import * as GuildConfig from './GuildConfig';
 import { userInfo } from '../Users/UserModel';
 import * as UserConfig from '../Users/UserConfig';
+import { CMD } from '../CMD';
 
 function maxGuildMember(guildLevel: number) {
   return guildLevel * GuildConfig.MemberGuild.STEP + GuildConfig.MemberGuild.STEP;
@@ -113,12 +114,69 @@ export class GuildController {
     }
   }
 
-  async leftGuild(msg: any, callback: any) {}
+  async leaveGuild(msg: any, callback: any) {
+    Guild.GuildModel.findOne({ _id: msg.guildID })
+      .then(async (data) => {
+        if (data) {
+          if (data.leaderId == msg.memberLeaveId) {
+            callback('', `Please change leader before leave your guild`);
+          } else {
+            let indexRm = -1;
+            for (let i = 0; i < data.memberList.length; i++) {
+              if (data.memberList[i].memberID == msg.memberLeaveId) {
+                indexRm = i;
+              }
+            }
+            if (indexRm != -1) {
+              data.memberList.splice(indexRm, 1);
+              Guild.GuildModel.updateOne(
+                { _id: msg.guildID },
+                { $set: { memberList: data.memberList }, $inc: { member: -1 } }
+              )
+                .then((success) => callback('', 'Leave Succeeded'))
+                .catch((err) => callback('', err));
+              await userInfo.updateOne(
+                { _id: msg.memberLeaveId },
+                { $set: { guildID: '', isJoin: UserConfig.GuildState.NORMAL } }
+              );
+            } else callback('', `You not on guild`);
+          }
+        } else callback('', `Not found guild`);
+      })
+      .catch((err) => callback('', 'Error when leave guild please contact admin'));
+  }
 
   async changeRole(msg: any, callback: any) {
-    Guild.GuildModel.findOne({ leaderId: msg.leaderId })
+    Guild.GuildModel.findOne({ leaderId: msg.leaderId, _id: msg.guildID })
       .then((data) => {
         if (data) {
+          if (msg.typeChange == Guild.GuildRole.DEPUTY) {
+            data.memberList.forEach((member) => {
+              if (member.memberID == msg.memberIdChange) {
+                member.role = Guild.GuildRole.DEPUTY;
+              }
+            });
+            Guild.GuildModel.updateOne({ _id: msg.guildID }, { $set: { memberList: data.memberList } })
+              .then((res) => callback('', 'Change Role Succeeded!'))
+              .catch((err) => callback('', err));
+          } else if (msg.typeChange == Guild.GuildRole.LEADER) {
+            data.memberList.forEach((member) => {
+              if (member.memberID == msg.leaderId) {
+                member.role = Guild.GuildRole.MEMBER;
+              }
+              if (member.memberID == msg.memberIdChange) {
+                member.role = Guild.GuildRole.LEADER;
+              }
+            });
+            Guild.GuildModel.updateOne(
+              { _id: msg.guildID },
+              { $set: { memberList: data.memberList, leaderId: msg.memberIdChange } }
+            )
+              .then((res) => callback('', 'Change Role Succeeded!'))
+              .catch((err) => callback('', err));
+          } else {
+            callback('', 'Parameter change role err!');
+          }
         } else {
           console.log('Check security!');
           callback('', 'You dont have permession!');
@@ -132,45 +190,43 @@ export class GuildController {
       .then(async (data) => {
         if (data) {
           console.log(msg);
-          if (msg.accept) {
-            let newMember: Array<Guild.IGuildMemberInfo> = new Array<Guild.IGuildMemberInfo>();
-            await newMember.push({
-              role: Guild.GuildRole.MEMBER,
-              pointDonate: 0,
-              memberID: msg.memberWaitId,
-              fundDonate: 0,
-              timeJoin: new Date(),
-            });
-            let indexRm = 0;
-            for (let i = 0; i < data.memberRequest.length; i++) {
-              if (data.memberRequest[i].playerId == msg.memberWaitId) {
-                indexRm = i;
-              }
+          let indexRm = -1;
+          for (let i = 0; i < data.memberRequest.length; i++) {
+            if (data.memberRequest[i].playerId == msg.memberWaitId) {
+              indexRm = i;
             }
-            data.memberRequest.splice(indexRm, 1);
-            console.log(data.memberRequest);
-            Guild.GuildModel.updateOne(
-              { _id: msg.guildID },
-              { $push: { memberList: newMember }, $inc: { member: 1 }, $set: { memberRequest: data.memberRequest } }
-            )
-              .then((data) => callback('', 'Add Member Succeeded!'))
-              .catch((err) => callback('', err));
-            await userInfo.updateOne({ _id: msg.memberWaitId }, { $set: { isJoin: UserConfig.GuildState.JOINED } });
+          }
+          if (indexRm != -1) {
+            if (msg.accept) {
+              console.log(data.memberRequest);
+              let newMember: Array<Guild.IGuildMemberInfo> = new Array<Guild.IGuildMemberInfo>();
+              await newMember.push({
+                role: Guild.GuildRole.MEMBER,
+                pointDonate: 0,
+                memberID: msg.memberWaitId,
+                fundDonate: 0,
+                timeJoin: new Date(),
+              });
+              data.memberRequest.splice(indexRm, 1);
+              Guild.GuildModel.updateOne(
+                { _id: msg.guildID },
+                { $push: { memberList: newMember }, $inc: { member: 1 }, $set: { memberRequest: data.memberRequest } }
+              )
+                .then((data) => callback('', 'Add Member Succeeded!'))
+                .catch((err) => callback('', err));
+              await userInfo.updateOne({ _id: msg.memberWaitId }, { $set: { isJoin: UserConfig.GuildState.JOINED } });
+            } else {
+              data.memberRequest.splice(indexRm, 1);
+              Guild.GuildModel.updateOne({ _id: msg.guildID }, { $set: { memberRequest: data.memberRequest } })
+                .then((data) => callback('', 'Deny Member Succeeded!'))
+                .catch((err) => callback('', err));
+              await userInfo.updateOne(
+                { _id: msg.memberWaitId },
+                { $set: { guildID: '', isJoin: UserConfig.GuildState.NORMAL } }
+              );
+            }
           } else {
-            let indexRm = 0;
-            for (let i = 0; i < data.memberRequest.length; i++) {
-              if (data.memberRequest[i].playerId == msg.memberWaitId) {
-                indexRm = i;
-              }
-            }
-            data.memberRequest.splice(indexRm, 1);
-            Guild.GuildModel.updateOne({ _id: msg.guildID }, { $set: { memberRequest: data.memberRequest } })
-              .then((data) => callback('', 'Deny Succeeded!'))
-              .catch((err) => callback('', err));
-            await userInfo.updateOne(
-              { _id: msg.memberWaitId },
-              { $set: { guildID: '', isJoin: UserConfig.GuildState.NORMAL } }
-            );
+            callback('', 'Not found member request!');
           }
         } else {
           console.log('Player dont have permission!');
@@ -184,7 +240,7 @@ export class GuildController {
       .then((data) => {
         if (data) {
           Guild.GuildModel.updateOne({ _id: msg.guildID }, { $set: { autoAcceptMember: msg.acceptMember } })
-            .then((res) => callback('', 'Change Role Succeeded!'))
+            .then((res) => callback('', 'Change Accept Member Succeeded!'))
             .catch((err) => callback('', err));
         } else {
           console.log('Check security!');
@@ -194,32 +250,35 @@ export class GuildController {
       .catch((err) => callback('', err));
   }
 }
+
+const guildController = new GuildController();
+
 export class ProcessGuild {
   processGuildMessage(msg: any, callback: any) {
     switch (msg.typeMsg) {
-      case 'create':
-        new GuildController().createGuild(msg, callback);
+      case CMD.GUILD_CREATE:
+        guildController.createGuild(msg, callback);
         break;
-      case 'join':
-        new GuildController().joinGuild(msg, callback);
+      case CMD.GUILD_JOIN:
+        guildController.joinGuild(msg, callback);
         break;
-      case 'left':
-        new GuildController().leftGuild(msg, callback);
+      case CMD.GUILD_LEAVE:
+        guildController.leaveGuild(msg, callback);
         break;
-      case 'delete':
-        new GuildController().deleteGuild(msg, callback);
+      case CMD.GUILD_DELETE:
+        guildController.deleteGuild(msg, callback);
         break;
-      case 'changeRole':
-        new GuildController().changeRole(msg, callback);
+      case CMD.GUILD_CHANGE_ROLE:
+        guildController.changeRole(msg, callback);
         break;
-      case 'acceptMember':
-        new GuildController().acceptMember(msg, callback);
+      case CMD.GUILD_ACCEPT_MEMBER:
+        guildController.acceptMember(msg, callback);
         break;
-      case 'autoAccept':
-        new GuildController().changeAcceptMember(msg, callback);
+      case CMD.GUILD_AUTO_ACCEPT:
+        guildController.changeAcceptMember(msg, callback);
         break;
-      case 'findGuild':
-        new GuildController().findGuild(msg, callback);
+      case CMD.GUILD_FIND_GUILD:
+        guildController.findGuild(msg, callback);
         break;
     }
   }
