@@ -4,6 +4,7 @@ import * as GuildConfig from './GuildConfig';
 import { userInfo } from '../Users/UserModel';
 import * as UserConfig from '../Users/UserConfig';
 import { CMD } from '../CMD';
+import { GuildErrMsg } from './GuildMessage';
 
 function maxGuildMember(guildLevel: number) {
   return guildLevel * GuildConfig.MemberGuild.STEP + GuildConfig.MemberGuild.STEP;
@@ -12,13 +13,36 @@ function maxGuildMember(guildLevel: number) {
 export class GuildController {
   async createGuild(msg: any, callback: any) {
     let result: any;
-    console.log(msg);
-    if (msg.isJoin == 2) {
-      result = `Player can't create guild`;
-    } else if (msg.isJoin == 1) {
-      result = `You are being request guild, can't create guild`;
+    if (msg.isJoin == UserConfig.GuildState.JOINED) {
+      result = {
+        Status: 0,
+        Body: {
+          err: {
+            code: GuildErrMsg.GUILD_CLIENT_ERR,
+            message: `Player can't create guild`,
+          },
+        },
+      };
+    } else if (msg.isJoin == UserConfig.GuildState.PENDING) {
+      result = {
+        Status: 0,
+        Body: {
+          err: {
+            code: GuildErrMsg.GUILD_CLIENT_ERR,
+            message: `You are being request guild, can't create guild`,
+          },
+        },
+      };
     } else if (msg.coin < GuildConfig.CointCreate) {
-      result = 'Coin is not enough';
+      result = {
+        Status: 0,
+        Body: {
+          err: {
+            code: GuildErrMsg.GUILD_NOT_ENOUGH,
+            message: 'Coin is not enough',
+          },
+        },
+      };
     } else {
       let guildLevel = 1;
       let region = 1;
@@ -58,7 +82,27 @@ export class GuildController {
         blockList: blockList,
         timeCreated: timeCreated,
       });
-      result = await guildData.save();
+      guildData
+        .save()
+        .then((success) => {
+          result = {
+            Status: 1,
+            Body: {
+              data: guildData,
+            },
+          };
+        })
+        .catch((err) => {
+          result = {
+            Status: 0,
+            Body: {
+              err: {
+                code: GuildErrMsg.GUILD_PARAM_ERR,
+                message: 'Param is uncorrect',
+              },
+            },
+          };
+        });
       await userInfo.findByIdAndUpdate(
         { _id: msg.leaderId },
         {
@@ -75,10 +119,26 @@ export class GuildController {
   async deleteGuild(msg: any, callback: any) {}
 
   async joinGuild(msg: any, callback: any) {
-    if (msg.isJoin == 2) {
-      callback('', `Can't join another Guild!`);
-    } else if (msg.isJoin == 1) {
-      callback('', `Please wait for response leader`);
+    if (msg.isJoin == UserConfig.GuildState.JOINED) {
+      callback('', {
+        Status: 0,
+        Body: {
+          err: {
+            code: GuildErrMsg.GUILD_CLIENT_ERR,
+            message: `Player can't join another guild`,
+          },
+        },
+      });
+    } else if (msg.isJoin == UserConfig.GuildState.PENDING) {
+      callback('', {
+        Status: 0,
+        Body: {
+          err: {
+            code: GuildErrMsg.GUILD_CLIENT_ERR,
+            message: `You are being request guild, can't join another guild`,
+          },
+        },
+      });
     } else {
       let checkRole = await Guild.GuildModel.findById({ _id: msg.guildID });
       if (!checkRole?.autoAcceptMember) {
@@ -88,8 +148,27 @@ export class GuildController {
           name: msg.playerName,
         });
         Guild.GuildModel.updateOne({ _id: msg.guildID }, { $push: { memberRequest: newMemberRequest } })
-          .then((data) => callback('', 'Wait for leader accpet!'))
-          .catch((err) => callback('', err));
+          .then((data) =>
+            callback('', {
+              Status: 1,
+              Body: {
+                data: {
+                  message: 'Wait for leader accept',
+                },
+              },
+            })
+          )
+          .catch((err) =>
+            callback('', {
+              Status: 0,
+              Body: {
+                err: {
+                  code: GuildErrMsg.GUILD_DATA_ERROR,
+                  message: `Data server error, retry another `,
+                },
+              },
+            })
+          );
         await userInfo.findByIdAndUpdate(
           { _id: msg.playerId },
           { $set: { guildID: msg.guildID, isJoin: UserConfig.GuildState.PENDING } }
@@ -103,10 +182,30 @@ export class GuildController {
           fundDonate: 0,
           timeJoin: new Date(),
         });
-        Guild.GuildModel.updateOne({ _id: msg.guildID }, { $push: { memberList: newMember }, $inc: { member: 1 } })
-          .then((data) => callback('', 'Join Guild Succeeded!'))
-          .catch((err) => callback('', err));
-        await userInfo.findByIdAndUpdate(
+        Guild.GuildModel.findByIdAndUpdate(
+          { _id: msg.guildID },
+          { $push: { memberList: newMember }, $inc: { member: 1 } }
+        )
+          .then((data) =>
+            callback('', {
+              Status: 1,
+              Body: {
+                data: data,
+              },
+            })
+          )
+          .catch((err) =>
+            callback('', {
+              Status: 0,
+              Body: {
+                err: {
+                  code: GuildErrMsg.GUILD_DATA_ERROR,
+                  message: `Data server error, retry another `,
+                },
+              },
+            })
+          );
+        await userInfo.updateOne(
           { _id: msg.playerId },
           { $set: { guildID: msg.guildID, isJoin: UserConfig.GuildState.JOINED } }
         );
@@ -119,7 +218,15 @@ export class GuildController {
       .then(async (data) => {
         if (data) {
           if (data.leaderId == msg.memberLeaveId) {
-            callback('', `Please change leader before leave your guild`);
+            callback('', {
+              Status: 0,
+              Body: {
+                err: {
+                  code: GuildErrMsg.GUILD_CLIENT_ERR,
+                  message: `Please change leader before leave your guild`,
+                },
+              },
+            });
           } else {
             let indexRm = -1;
             for (let i = 0; i < data.memberList.length; i++) {
@@ -133,17 +240,64 @@ export class GuildController {
                 { _id: msg.guildID },
                 { $set: { memberList: data.memberList }, $inc: { member: -1 } }
               )
-                .then((success) => callback('', 'Leave Succeeded'))
-                .catch((err) => callback('', err));
+                .then((success) =>
+                  callback('', {
+                    Status: 1,
+                    Body: {
+                      data: {
+                        message: `Leave Success`,
+                      },
+                    },
+                  })
+                )
+                .catch((err) =>
+                  callback('', {
+                    Status: 0,
+                    Body: {
+                      err: {
+                        code: GuildErrMsg.GUILD_DATA_ERROR,
+                        message: `Data server error, retry another `,
+                      },
+                    },
+                  })
+                );
               await userInfo.updateOne(
                 { _id: msg.memberLeaveId },
                 { $set: { guildID: '', isJoin: UserConfig.GuildState.NORMAL } }
               );
-            } else callback('', `You not on guild`);
+            } else
+              callback('', {
+                Status: 0,
+                Body: {
+                  err: {
+                    code: GuildErrMsg.GUILD_CLIENT_ERR,
+                    message: `You not on guild`,
+                  },
+                },
+              });
           }
-        } else callback('', `Not found guild`);
+        } else
+          callback('', {
+            Status: 0,
+            Body: {
+              err: {
+                code: GuildErrMsg.GUILD_DATA_ERROR,
+                message: `Data server error, retry another `,
+              },
+            },
+          });
       })
-      .catch((err) => callback('', 'Error when leave guild please contact admin'));
+      .catch((err) =>
+        callback('', {
+          Status: 0,
+          Body: {
+            err: {
+              code: GuildErrMsg.GUILD_SERVER_ERROR,
+              message: `Server error, retry another `,
+            },
+          },
+        })
+      );
   }
 
   async changeRole(msg: any, callback: any) {
@@ -157,8 +311,27 @@ export class GuildController {
               }
             });
             Guild.GuildModel.updateOne({ _id: msg.guildID }, { $set: { memberList: data.memberList } })
-              .then((res) => callback('', 'Change Role Succeeded!'))
-              .catch((err) => callback('', err));
+              .then((res) =>
+                callback('', {
+                  Status: 1,
+                  Body: {
+                    data: {
+                      message: `Change Role Success`,
+                    },
+                  },
+                })
+              )
+              .catch((err) =>
+                callback('', {
+                  Status: 0,
+                  Body: {
+                    err: {
+                      code: GuildErrMsg.GUILD_SERVER_ERROR,
+                      message: `Server error, retry another `,
+                    },
+                  },
+                })
+              );
           } else if (msg.typeChange == Guild.GuildRole.LEADER) {
             data.memberList.forEach((member) => {
               if (member.memberID == msg.leaderId) {
@@ -172,14 +345,49 @@ export class GuildController {
               { _id: msg.guildID },
               { $set: { memberList: data.memberList, leaderId: msg.memberIdChange } }
             )
-              .then((res) => callback('', 'Change Role Succeeded!'))
-              .catch((err) => callback('', err));
+              .then((res) =>
+                callback('', {
+                  Status: 1,
+                  Body: {
+                    data: {
+                      message: data.memberList,
+                    },
+                  },
+                })
+              )
+              .catch((err) =>
+                callback('', {
+                  Status: 0,
+                  Body: {
+                    err: {
+                      code: GuildErrMsg.GUILD_CLIENT_ERR,
+                      message: `Param client err `,
+                    },
+                  },
+                })
+              );
           } else {
-            callback('', 'Parameter change role err!');
+            callback('', {
+              Status: 0,
+              Body: {
+                err: {
+                  code: GuildErrMsg.GUILD_DATA_ERROR,
+                  message: `Data server error, retry another `,
+                },
+              },
+            });
           }
         } else {
           console.log('Check security!');
-          callback('', 'You dont have permession!');
+          callback('', {
+            Status: 0,
+            Body: {
+              err: {
+                code: GuildErrMsg.GUILD_VALIDATE_ERROR,
+                message: `You dont have permisson `,
+              },
+            },
+          });
         }
       })
       .catch((err) => callback('', err));
@@ -208,29 +416,82 @@ export class GuildController {
                 timeJoin: new Date(),
               });
               data.memberRequest.splice(indexRm, 1);
-              Guild.GuildModel.updateOne(
+              Guild.GuildModel.findByIdAndUpdate(
                 { _id: msg.guildID },
                 { $push: { memberList: newMember }, $inc: { member: 1 }, $set: { memberRequest: data.memberRequest } }
               )
-                .then((data) => callback('', 'Add Member Succeeded!'))
-                .catch((err) => callback('', err));
+                .then((data) =>
+                  callback('', {
+                    Status: 1,
+                    Body: {
+                      data: {
+                        message: data?.memberList,
+                      },
+                    },
+                  })
+                )
+                .catch((err) =>
+                  callback('', {
+                    Status: 0,
+                    Body: {
+                      err: {
+                        code: GuildErrMsg.GUILD_CLIENT_ERR,
+                        message: `Param client err `,
+                      },
+                    },
+                  })
+                );
               await userInfo.updateOne({ _id: msg.memberWaitId }, { $set: { isJoin: UserConfig.GuildState.JOINED } });
             } else {
               data.memberRequest.splice(indexRm, 1);
-              Guild.GuildModel.updateOne({ _id: msg.guildID }, { $set: { memberRequest: data.memberRequest } })
-                .then((data) => callback('', 'Deny Member Succeeded!'))
-                .catch((err) => callback('', err));
+              Guild.GuildModel.findByIdAndUpdate({ _id: msg.guildID }, { $set: { memberRequest: data.memberRequest } })
+                .then((data) =>
+                  callback('', {
+                    Status: 1,
+                    Body: {
+                      data: {
+                        message: data?.memberRequest,
+                      },
+                    },
+                  })
+                )
+                .catch((err) =>
+                  callback('', {
+                    Status: 0,
+                    Body: {
+                      err: {
+                        code: GuildErrMsg.GUILD_DATA_ERROR,
+                        message: `Data server error, retry another `,
+                      },
+                    },
+                  })
+                );
               await userInfo.updateOne(
                 { _id: msg.memberWaitId },
                 { $set: { guildID: '', isJoin: UserConfig.GuildState.NORMAL } }
               );
             }
           } else {
-            callback('', 'Not found member request!');
+            callback('', {
+              Status: 0,
+              Body: {
+                err: {
+                  code: GuildErrMsg.GUILD_CLIENT_ERR,
+                  message: `Not found member request`,
+                },
+              },
+            });
           }
         } else {
-          console.log('Player dont have permission!');
-          callback('', 'You dont have permession!');
+          callback('', {
+            Status: 0,
+            Body: {
+              err: {
+                code: GuildErrMsg.GUILD_PERMISSION,
+                message: `You don't have permission`,
+              },
+            },
+          });
         }
       })
       .catch((err) => callback('', err));
@@ -240,14 +501,45 @@ export class GuildController {
       .then((data) => {
         if (data) {
           Guild.GuildModel.updateOne({ _id: msg.guildID }, { $set: { autoAcceptMember: msg.acceptMember } })
-            .then((res) => callback('', 'Change Accept Member Succeeded!'))
-            .catch((err) => callback('', err));
+            .then((res) =>
+              callback('', {
+                Status: 1,
+              })
+            )
+            .catch((err) =>
+              callback('', {
+                Status: 0,
+                Body: {
+                  err: {
+                    code: GuildErrMsg.GUILD_SERVER_ERROR,
+                    message: `Server error, retry another `,
+                  },
+                },
+              })
+            );
         } else {
-          console.log('Check security!');
-          callback('', 'You dont have permession!');
+          callback('', {
+            Status: 0,
+            Body: {
+              err: {
+                code: GuildErrMsg.GUILD_VALIDATE_ERROR,
+                message: `You dont have permisson`,
+              },
+            },
+          });
         }
       })
-      .catch((err) => callback('', err));
+      .catch((err) =>
+        callback('', {
+          Status: 0,
+          Body: {
+            err: {
+              code: GuildErrMsg.GUILD_SERVER_ERROR,
+              message: `Server error, retry another `,
+            },
+          },
+        })
+      );
   }
 }
 

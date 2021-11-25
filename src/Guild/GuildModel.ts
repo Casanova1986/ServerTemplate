@@ -12,6 +12,7 @@ export enum GuildRole {
   DEPUTY = 1,
   MEMBER = 0,
 }
+
 export interface IMusterInfo {
   point: number;
   time: Date;
