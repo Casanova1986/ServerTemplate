@@ -20,9 +20,9 @@ export interface IMusterInfo {
 
 export interface IGuildMemberInfo {
   role: GuildRole;
-  pointDonate?: number;
+  pointDonate: number;
   memberID: string;
-  fundDonate?: number;
+  fundDonate: number;
   timeJoin: Date;
   musterHistory?: IMusterInfo[];
 }

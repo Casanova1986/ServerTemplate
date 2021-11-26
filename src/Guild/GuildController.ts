@@ -10,6 +10,27 @@ function maxGuildMember(guildLevel: number) {
   return guildLevel * GuildConfig.MemberGuild.STEP + GuildConfig.MemberGuild.STEP;
 }
 
+function donateGuildProcess(typeDonate: number): { Coin: number; Gem: number; Fund: number; Point: number } {
+  let guildDonate = {
+    Coin: GuildConfig.DontateGuild.COMMON.Coin,
+    Gem: GuildConfig.DontateGuild.COMMON.Gem,
+    Fund: GuildConfig.DontateGuild.COMMON.Fund,
+    Point: GuildConfig.DontateGuild.COMMON.Point,
+  };
+  if (typeDonate == GuildConfig.DontateGuild.GOOD.type) {
+    guildDonate.Coin = GuildConfig.DontateGuild.GOOD.Coin;
+    guildDonate.Gem = GuildConfig.DontateGuild.GOOD.Gem;
+    guildDonate.Fund = GuildConfig.DontateGuild.GOOD.Fund;
+    guildDonate.Point = GuildConfig.DontateGuild.GOOD.Point;
+  } else if (typeDonate == GuildConfig.DontateGuild.VERYGOOD.type) {
+    guildDonate.Coin = GuildConfig.DontateGuild.VERYGOOD.Coin;
+    guildDonate.Gem = GuildConfig.DontateGuild.VERYGOOD.Gem;
+    guildDonate.Fund = GuildConfig.DontateGuild.VERYGOOD.Fund;
+    guildDonate.Point = GuildConfig.DontateGuild.VERYGOOD.Point;
+  }
+  return guildDonate;
+}
+
 export class GuildController {
   async createGuild(msg: any, callback: any) {
     let result: any;
@@ -103,7 +124,7 @@ export class GuildController {
             },
           };
         });
-      await userInfo.findByIdAndUpdate(
+      await userInfo.updateOne(
         { _id: msg.leaderId },
         {
           $inc: { coin: -GuildConfig.CointCreate },
@@ -390,7 +411,17 @@ export class GuildController {
           });
         }
       })
-      .catch((err) => callback('', err));
+      .catch((err) =>
+        callback('', {
+          Status: 0,
+          Body: {
+            err: {
+              code: GuildErrMsg.GUILD_CLIENT_ERR,
+              message: `Param client err `,
+            },
+          },
+        })
+      );
   }
 
   async acceptMember(msg: any, callback: any) {
@@ -494,8 +525,19 @@ export class GuildController {
           });
         }
       })
-      .catch((err) => callback('', err));
+      .catch((err) =>
+        callback('', {
+          Status: 0,
+          Body: {
+            err: {
+              code: GuildErrMsg.GUILD_SERVER_ERROR,
+              message: `Server error, retry another `,
+            },
+          },
+        })
+      );
   }
+
   async changeAcceptMember(msg: any, callback: any) {
     Guild.GuildModel.findOne({ leaderId: msg.leaderId })
       .then((data) => {
@@ -541,6 +583,104 @@ export class GuildController {
         })
       );
   }
+  async donateGuild(msg: any, callback: any) {
+    Guild.GuildModel.findOne({ _id: msg.guildID })
+      .then(async (data) => {
+        if (data) {
+          if (
+            msg.typeDonate >= GuildConfig.DontateGuild.COMMON.type &&
+            msg.typeDonate <= GuildConfig.DontateGuild.VERYGOOD.type
+          ) {
+            let donateData = donateGuildProcess(msg.typeDonate);
+            console.log(donateData);
+            if (msg.coin < donateData.Fund || msg.gem < donateData.Gem) {
+              callback('', {
+                Status: 0,
+                Body: {
+                  err: {
+                    code: GuildErrMsg.GUILD_NOT_ENOUGH,
+                    message: 'Coin, Gem is not enough',
+                  },
+                },
+              });
+            } else {
+              await userInfo.updateOne(
+                { _id: msg.memberDonateId },
+                {
+                  $inc: { coin: -donateData.Coin, gem: donateData.Gem },
+                }
+              );
+              for (let i = 0; i < data.memberList.length; i++) {
+                if (data.memberList[i].memberID == msg.memberDonateId) {
+                  data.memberList[i].pointDonate += donateData.Point;
+                  data.memberList[i].fundDonate += donateData.Fund;
+                }
+              }
+              Guild.GuildModel.findByIdAndUpdate(
+                { _id: msg.guildID },
+                {
+                  $inc: { point: donateData.Point, fund: donateData.Fund },
+                  $set: { memberList: data.memberList },
+                }
+              )
+                .then((data) =>
+                  callback('', {
+                    Status: 1,
+                    Body: {
+                      data: {
+                        point: data?.point,
+                        fund: data?.fund,
+                      },
+                    },
+                  })
+                )
+                .catch((err) =>
+                  callback('', {
+                    Status: 0,
+                    Body: {
+                      err: {
+                        code: GuildErrMsg.GUILD_CLIENT_ERR,
+                        message: `Param client err `,
+                      },
+                    },
+                  })
+                );
+            }
+          } else {
+            callback('', {
+              Status: 0,
+              Body: {
+                err: {
+                  code: GuildErrMsg.GUILD_CLIENT_ERR,
+                  message: `Param client err `,
+                },
+              },
+            });
+          }
+        } else {
+          callback('', {
+            Status: 0,
+            Body: {
+              err: {
+                code: GuildErrMsg.GUILD_DATA_ERROR,
+                message: `Data server error, retry another `,
+              },
+            },
+          });
+        }
+      })
+      .catch((err) =>
+        callback('', {
+          Status: 0,
+          Body: {
+            err: {
+              code: GuildErrMsg.GUILD_VALIDATE_ERROR,
+              message: `You dont have permisson `,
+            },
+          },
+        })
+      );
+  }
 }
 
 const guildController = new GuildController();
@@ -571,6 +711,9 @@ export class ProcessGuild {
         break;
       case CMD.GUILD_FIND_GUILD:
         guildController.findGuild(msg, callback);
+        break;
+      case CMD.GUILD_DONATE:
+        guildController.donateGuild(msg, callback);
         break;
     }
   }
