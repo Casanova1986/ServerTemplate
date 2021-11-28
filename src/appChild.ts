@@ -64,10 +64,7 @@ export default function AppChild() {
           });
         } else {
           console.log(results);
-          callback({
-            Status: 1,
-            data: results,
-          });
+          callback('', results);
         }
       });
       // let guild = new GuildController();
