@@ -64,7 +64,7 @@ export default function AppChild() {
           });
         } else {
           console.log(results);
-          callback('', results);
+          callback(results);
         }
       });
       // let guild = new GuildController();
